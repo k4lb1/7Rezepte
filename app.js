@@ -9,7 +9,6 @@
   var loadingEl = document.getElementById('recipes-loading');
   var errorEl = document.getElementById('recipes-error');
   var btnGen = document.getElementById('btn-generate');
-  var btnBack = document.getElementById('btn-back');
   var themeBtn = document.getElementById('theme-toggle');
 
   function loadTheme() {
@@ -102,13 +101,7 @@
       });
   }
 
-  function onBack() {
-    draw([]);
-    showError('');
-  }
-
   loadTheme();
   btnGen.addEventListener('click', onGenerate);
-  btnBack.addEventListener('click', onBack);
   themeBtn.addEventListener('click', cycleTheme);
 })();
