@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>7 Rezepte</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="crt-overlay" class="crt-overlay" aria-hidden="true"></div>
+  <div id="scanline" class="scanline" aria-hidden="true"></div>
+
+  <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Theme wechseln" title="Theme wechseln">
+    <span class="theme-icon theme-icon-glass">◇</span>
+    <span class="theme-icon theme-icon-terminal">▢</span>
+  </button>
+
+  <main class="app" role="main">
+    <div class="content">
+      <div id="recipes-list" class="recipes-list" role="list"></div>
+      <div id="recipes-loading" class="recipes-loading hidden" aria-hidden="true">Lade…</div>
+      <div id="recipes-error" class="recipes-error hidden" role="alert"></div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <button type="button" id="btn-back" class="btn btn-secondary" aria-label="Zurück">Zurück</button>
+    <button type="button" id="btn-generate" class="btn btn-primary" aria-label="7 Rezepte generieren">Generieren</button>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
