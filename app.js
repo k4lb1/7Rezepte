@@ -24,6 +24,60 @@
   var currentMeals = [];
   var modalOpen = false;
   var modalRequestId = 0;
+  var TRANS_MAX = 450;
+
+  function isTranslationError(text) {
+    return typeof text === 'string' && /QUERY LENGTH LIMIT EXCEEDED|MAX ALLOWED QUERY/i.test(text);
+  }
+
+  function splitTextChunks(text, maxLen) {
+    maxLen = maxLen || TRANS_MAX;
+    if (!text || text.length <= maxLen) return [text || ''];
+
+    var chunks = [];
+    var rest = text.trim();
+
+    while (rest.length > maxLen) {
+      var window = rest.slice(0, maxLen);
+      var cut = window.lastIndexOf('\n\n');
+      if (cut < 80) cut = window.lastIndexOf('\n');
+      if (cut < 80) cut = window.lastIndexOf('. ');
+      if (cut < 80) cut = window.lastIndexOf(' ');
+      if (cut < 40) cut = maxLen;
+
+      var chunk = rest.slice(0, cut).trim();
+      if (!chunk) {
+        chunk = rest.slice(0, maxLen);
+        cut = maxLen;
+      } else if (rest.slice(cut, cut + 2) === '. ') {
+        cut += 2;
+      } else if (rest[cut] === '\n' || rest[cut] === ' ') {
+        cut += 1;
+      }
+
+      chunks.push(chunk);
+      rest = rest.slice(cut).trim();
+    }
+
+    if (rest) chunks.push(rest);
+    return chunks;
+  }
+
+  function joinTranslatedParts(parts) {
+    return parts.filter(Boolean).join('\n\n');
+  }
+
+  function translateChunksSequentially(chunks) {
+    return chunks.reduce(function (chain, chunk) {
+      return chain.then(function (acc) {
+        return translate(chunk).then(function (t) {
+          if (isTranslationError(t)) t = chunk;
+          acc.push(t);
+          return acc;
+        });
+      });
+    }, Promise.resolve([])).then(joinTranslatedParts);
+  }
 
   function loadTheme() {
     try {
@@ -101,11 +155,53 @@
       .catch(function () { return text; });
   }
 
+  function translateLong(text) {
+    if (!text || typeof text !== 'string') return Promise.resolve(text || '—');
+    var chunks = splitTextChunks(text);
+    if (chunks.length === 1) {
+      return translate(chunks[0]).then(function (t) {
+        if (isTranslationError(t)) {
+          return translateChunksSequentially(splitTextChunks(text, 220));
+        }
+        return t;
+      });
+    }
+    return translateChunksSequentially(chunks);
+  }
+
   function translateLines(lines) {
     if (!lines || !lines.length) return Promise.resolve([]);
-    return translate(lines.join('\n')).then(function (text) {
-      return text.split('\n').map(function (line) { return line.trim(); }).filter(Boolean);
+
+    var batches = [];
+    var current = [];
+    var currentLen = 0;
+
+    lines.forEach(function (line) {
+      var addLen = (current.length ? 1 : 0) + line.length;
+      if (current.length && currentLen + addLen > TRANS_MAX) {
+        batches.push(current);
+        current = [line];
+        currentLen = line.length;
+      } else {
+        current.push(line);
+        currentLen += addLen;
+      }
     });
+    if (current.length) batches.push(current);
+
+    return batches.reduce(function (chain, batch) {
+      return chain.then(function (acc) {
+        return translate(batch.join('\n')).then(function (text) {
+          var translated;
+          if (isTranslationError(text)) {
+            translated = batch;
+          } else {
+            translated = text.split('\n').map(function (line) { return line.trim(); }).filter(Boolean);
+          }
+          return acc.concat(translated);
+        });
+      });
+    }, Promise.resolve([]));
   }
 
   function setModalLoading(on) {
@@ -142,7 +238,7 @@
     var ingredients = getIngredients(meal);
     return Promise.all([
       meal.displayIngredients ? Promise.resolve(meal.displayIngredients) : translateLines(ingredients),
-      meal.displayInstructions ? Promise.resolve(meal.displayInstructions) : translate(meal.strInstructions || '—')
+      meal.displayInstructions ? Promise.resolve(meal.displayInstructions) : translateLong(meal.strInstructions || '—')
     ]).then(function (parts) {
       meal.displayIngredients = parts[0];
       meal.displayInstructions = parts[1];
