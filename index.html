@@ -35,6 +35,23 @@
     <button type="button" id="btn-generate" class="btn btn-primary" aria-label="7 Rezepte generieren">Generieren</button>
   </footer>
 
+  <div id="recipe-modal" class="recipe-modal hidden" role="dialog" aria-modal="true" aria-labelledby="recipe-modal-title" aria-hidden="true">
+    <button type="button" class="recipe-modal-backdrop" aria-label="Dialog schließen"></button>
+    <div class="recipe-modal-panel">
+      <button type="button" id="recipe-modal-close" class="recipe-modal-close" aria-label="Schließen">×</button>
+      <div id="recipe-modal-loading" class="recipe-modal-loading hidden">Lade…</div>
+      <div id="recipe-modal-content" class="recipe-modal-content hidden">
+        <img id="recipe-modal-image" class="recipe-modal-image" alt="">
+        <h2 id="recipe-modal-title" class="recipe-modal-title"></h2>
+        <p id="recipe-modal-meta" class="recipe-modal-meta"></p>
+        <h3 class="recipe-modal-section">Zutaten</h3>
+        <ul id="recipe-modal-ingredients" class="recipe-modal-ingredients"></ul>
+        <h3 class="recipe-modal-section">Zubereitung</h3>
+        <p id="recipe-modal-instructions" class="recipe-modal-instructions"></p>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>
