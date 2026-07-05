@@ -3,121 +3,154 @@
 
   var MEAL_API = 'https://www.themealdb.com/api/json/v1/1/random.php';
   var TRANS_API = 'https://api.mymemory.translated.net/get';
+  var TRANS_LIMIT = 450;
 
   var listEl = document.getElementById('recipes-list');
   var loadingEl = document.getElementById('recipes-loading');
   var errorEl = document.getElementById('recipes-error');
-  var btnGen = document.getElementById('btn-generate');
+  var btnGenerate = document.getElementById('btn-generate');
   var modalEl = document.getElementById('recipe-modal');
-  var modalBackdrop = modalEl && modalEl.querySelector('.recipe-modal-backdrop');
-  var modalCloseBtn = document.getElementById('recipe-modal-close');
-  var modalLoadingEl = document.getElementById('recipe-modal-loading');
-  var modalContentEl = document.getElementById('recipe-modal-content');
-  var modalImageEl = document.getElementById('recipe-modal-image');
-  var modalTitleEl = document.getElementById('recipe-modal-title');
-  var modalMetaEl = document.getElementById('recipe-modal-meta');
-  var modalIngredientsEl = document.getElementById('recipe-modal-ingredients');
-  var modalInstructionsEl = document.getElementById('recipe-modal-instructions');
+  var modalBackdrop = modalEl.querySelector('.recipe-modal-backdrop');
+  var modalClose = document.getElementById('recipe-modal-close');
+  var modalLoading = document.getElementById('recipe-modal-loading');
+  var modalBody = document.getElementById('recipe-modal-content');
+  var modalImg = document.getElementById('recipe-modal-image');
+  var modalTitle = document.getElementById('recipe-modal-title');
+  var modalMeta = document.getElementById('recipe-modal-meta');
+  var modalIngredients = document.getElementById('recipe-modal-ingredients');
+  var modalInstructions = document.getElementById('recipe-modal-instructions');
 
-  var currentMeals = [];
+  var meals = [];
   var modalOpen = false;
-  var modalRequestId = 0;
-  var TRANS_MAX = 450;
+  var loadToken = 0;
 
-  function isTranslationError(text) {
-    return typeof text === 'string' && /QUERY LENGTH LIMIT EXCEEDED|MAX ALLOWED QUERY/i.test(text);
+  function show(el, visible) {
+    el.classList.toggle('hidden', !visible);
   }
 
-  function splitTextChunks(text, maxLen) {
-    maxLen = maxLen || TRANS_MAX;
-    if (!text || text.length <= maxLen) return [text || ''];
+  function ingredients(meal) {
+    var out = [];
+    for (var i = 1; i <= 20; i++) {
+      var name = meal['strIngredient' + i];
+      if (!name || !name.trim()) continue;
+      var amount = (meal['strMeasure' + i] || '').trim();
+      out.push(amount ? amount + ' ' + name.trim() : name.trim());
+    }
+    return out;
+  }
 
-    var chunks = [];
+  function splitText(text, max) {
+    max = max || TRANS_LIMIT;
+    if (!text || text.length <= max) return [text || ''];
+
+    var parts = [];
     var rest = text.trim();
 
-    while (rest.length > maxLen) {
-      var window = rest.slice(0, maxLen);
-      var cut = window.lastIndexOf('\n\n');
-      if (cut < 80) cut = window.lastIndexOf('\n');
-      if (cut < 80) cut = window.lastIndexOf('. ');
-      if (cut < 80) cut = window.lastIndexOf(' ');
-      if (cut < 40) cut = maxLen;
+    while (rest.length > max) {
+      var slice = rest.slice(0, max);
+      var at = slice.lastIndexOf('\n\n');
+      if (at < 80) at = slice.lastIndexOf('\n');
+      if (at < 80) at = slice.lastIndexOf('. ');
+      if (at < 80) at = slice.lastIndexOf(' ');
+      if (at < 40) at = max;
 
-      var chunk = rest.slice(0, cut).trim();
+      var chunk = rest.slice(0, at).trim();
       if (!chunk) {
-        chunk = rest.slice(0, maxLen);
-        cut = maxLen;
-      } else if (rest.slice(cut, cut + 2) === '. ') {
-        cut += 2;
-      } else if (rest[cut] === '\n' || rest[cut] === ' ') {
-        cut += 1;
+        chunk = rest.slice(0, max);
+        at = max;
+      } else if (rest.slice(at, at + 2) === '. ') {
+        at += 2;
+      } else if (rest[at] === '\n' || rest[at] === ' ') {
+        at += 1;
       }
 
-      chunks.push(chunk);
-      rest = rest.slice(cut).trim();
+      parts.push(chunk);
+      rest = rest.slice(at).trim();
     }
 
-    if (rest) chunks.push(rest);
-    return chunks;
+    if (rest) parts.push(rest);
+    return parts;
   }
 
-  function joinTranslatedParts(parts) {
-    return parts.filter(Boolean).join('\n\n');
+  function badTranslation(text) {
+    return /QUERY LENGTH LIMIT EXCEEDED|MAX ALLOWED QUERY/i.test(text);
   }
 
-  function translateChunksSequentially(chunks) {
+  function translateOne(text) {
+    if (!text) return Promise.resolve('');
+    return fetch(TRANS_API + '?q=' + encodeURIComponent(text) + '&langpair=en|de')
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        var out = data.responseData && data.responseData.translatedText;
+        if (!out || badTranslation(out)) return text;
+        return out;
+      })
+      .catch(function () { return text; });
+  }
+
+  function translateText(text) {
+    var chunks = splitText(text);
     return chunks.reduce(function (chain, chunk) {
-      return chain.then(function (acc) {
-        return translate(chunk).then(function (t) {
-          if (isTranslationError(t)) t = chunk;
-          acc.push(t);
-          return acc;
+      return chain.then(function (result) {
+        return translateOne(chunk).then(function (part) {
+          return result ? result + '\n\n' + part : part;
         });
       });
-    }, Promise.resolve([])).then(joinTranslatedParts);
+    }, Promise.resolve(''));
   }
 
-  function showLoading(on) {
-    loadingEl.classList.toggle('hidden', !on);
-    listEl.classList.toggle('hidden', on);
-  }
+  function translateList(items) {
+    if (!items.length) return Promise.resolve([]);
 
-  function showError(msg) {
-    errorEl.textContent = msg || '';
-    errorEl.classList.toggle('hidden', !msg);
-  }
+    var groups = [];
+    var group = [];
+    var len = 0;
 
-  function getIngredients(meal) {
-    var items = [];
-    var i;
-    for (i = 1; i <= 20; i++) {
-      var ing = meal['strIngredient' + i];
-      if (ing && ing.trim()) {
-        var measure = meal['strMeasure' + i] || '';
-        items.push((measure.trim() ? measure.trim() + ' ' : '') + ing.trim());
+    items.forEach(function (item) {
+      var next = len + item.length + (group.length ? 1 : 0);
+      if (group.length && next > TRANS_LIMIT) {
+        groups.push(group);
+        group = [item];
+        len = item.length;
+      } else {
+        group.push(item);
+        len = next;
       }
-    }
-    return items;
+    });
+    if (group.length) groups.push(group);
+
+    return groups.reduce(function (chain, batch) {
+      return chain.then(function (acc) {
+        return translateOne(batch.join('\n')).then(function (text) {
+          if (badTranslation(text)) return acc.concat(batch);
+          return acc.concat(text.split('\n').map(function (s) { return s.trim(); }).filter(Boolean));
+        });
+      });
+    }, Promise.resolve([]));
   }
 
-  function buildMeta(meal) {
-    var parts = [];
-    if (meal.strCategory) parts.push(meal.strCategory);
-    if (meal.strArea) parts.push(meal.strArea);
-    return parts.join(' · ');
+  function fetchMeal() {
+    return fetch(MEAL_API)
+      .then(function (res) {
+        if (!res.ok) throw new Error('fetch failed');
+        return res.json();
+      })
+      .then(function (data) {
+        return (data.meals && data.meals[0]) || null;
+      });
   }
 
-  function draw(meals) {
-    currentMeals = meals || [];
+  function renderList(items) {
+    meals = items;
     listEl.innerHTML = '';
-    showError('');
-    currentMeals.forEach(function (m, index) {
-      var title = (m && m.displayTitle) || (m && m.strMeal) || '—';
+    errorEl.textContent = '';
+    show(errorEl, false);
+
+    items.forEach(function (meal, index) {
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'recipe-item';
-      btn.setAttribute('role', 'listitem');
-      btn.textContent = title;
+      btn.textContent = meal.displayTitle || meal.strMeal;
       btn.addEventListener('click', function () {
         openRecipe(index);
       });
@@ -125,101 +158,43 @@
     });
   }
 
-  function translate(text) {
-    if (!text || typeof text !== 'string') return Promise.resolve(text || '—');
-    return fetch(TRANS_API + '?q=' + encodeURIComponent(text) + '&langpair=en|de')
-      .then(function (r) { return r.json(); })
-      .then(function (d) {
-        var t = d && d.responseData && d.responseData.translatedText;
-        return t || text;
-      })
-      .catch(function () { return text; });
-  }
+  function fillModal(meal, isLoading) {
+    var title = meal.displayTitle || meal.strMeal;
 
-  function translateLong(text) {
-    if (!text || typeof text !== 'string') return Promise.resolve(text || '—');
-    var chunks = splitTextChunks(text);
-    if (chunks.length === 1) {
-      return translate(chunks[0]).then(function (t) {
-        if (isTranslationError(t)) {
-          return translateChunksSequentially(splitTextChunks(text, 220));
-        }
-        return t;
-      });
+    modalTitle.textContent = title;
+    modalMeta.textContent = [meal.strCategory, meal.strArea].filter(Boolean).join(' · ');
+
+    if (meal.strMealThumb) {
+      modalImg.src = meal.strMealThumb;
+      modalImg.alt = title;
+      show(modalImg, true);
+    } else {
+      show(modalImg, false);
     }
-    return translateChunksSequentially(chunks);
-  }
 
-  function translateLines(lines) {
-    if (!lines || !lines.length) return Promise.resolve([]);
+    show(modalLoading, isLoading);
+    show(modalBody, !isLoading);
 
-    var batches = [];
-    var current = [];
-    var currentLen = 0;
+    if (isLoading) return;
 
-    lines.forEach(function (line) {
-      var addLen = (current.length ? 1 : 0) + line.length;
-      if (current.length && currentLen + addLen > TRANS_MAX) {
-        batches.push(current);
-        current = [line];
-        currentLen = line.length;
-      } else {
-        current.push(line);
-        currentLen += addLen;
-      }
-    });
-    if (current.length) batches.push(current);
-
-    return batches.reduce(function (chain, batch) {
-      return chain.then(function (acc) {
-        return translate(batch.join('\n')).then(function (text) {
-          var translated;
-          if (isTranslationError(text)) {
-            translated = batch;
-          } else {
-            translated = text.split('\n').map(function (line) { return line.trim(); }).filter(Boolean);
-          }
-          return acc.concat(translated);
-        });
-      });
-    }, Promise.resolve([]));
-  }
-
-  function setModalLoading(on) {
-    modalLoadingEl.classList.toggle('hidden', !on);
-    modalContentEl.classList.toggle('hidden', on);
-  }
-
-  function renderRecipeDetails(meal) {
-    var title = meal.displayTitle || meal.strMeal || '—';
-    var ingredients = meal.displayIngredients || getIngredients(meal);
-    var instructions = meal.displayInstructions || meal.strInstructions || '—';
-
-    modalTitleEl.textContent = title;
-    modalMetaEl.textContent = buildMeta(meal);
-    modalImageEl.src = meal.strMealThumb || '';
-    modalImageEl.alt = title;
-    modalImageEl.classList.toggle('hidden', !meal.strMealThumb);
-
-    modalIngredientsEl.innerHTML = '';
-    ingredients.forEach(function (item) {
+    modalIngredients.innerHTML = '';
+    (meal.displayIngredients || ingredients(meal)).forEach(function (item) {
       var li = document.createElement('li');
       li.textContent = item;
-      modalIngredientsEl.appendChild(li);
+      modalIngredients.appendChild(li);
     });
 
-    modalInstructionsEl.textContent = instructions;
+    modalInstructions.textContent = meal.displayInstructions || meal.strInstructions || '';
   }
 
-  function ensureRecipeDetails(meal) {
+  function loadDetails(meal) {
     if (meal.displayIngredients && meal.displayInstructions) {
       return Promise.resolve(meal);
     }
 
-    var ingredients = getIngredients(meal);
     return Promise.all([
-      meal.displayIngredients ? Promise.resolve(meal.displayIngredients) : translateLines(ingredients),
-      meal.displayInstructions ? Promise.resolve(meal.displayInstructions) : translateLong(meal.strInstructions || '—')
+      meal.displayIngredients ? meal.displayIngredients : translateList(ingredients(meal)),
+      meal.displayInstructions ? meal.displayInstructions : translateText(meal.strInstructions || '')
     ]).then(function (parts) {
       meal.displayIngredients = parts[0];
       meal.displayInstructions = parts[1];
@@ -228,98 +203,68 @@
   }
 
   function openRecipe(index) {
-    var meal = currentMeals[index];
-    if (!meal || !modalEl) return;
+    var meal = meals[index];
+    if (!meal) return;
 
-    modalRequestId += 1;
-    var requestId = modalRequestId;
-
+    var token = ++loadToken;
     modalOpen = true;
+
     modalEl.classList.remove('hidden');
     modalEl.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
+    fillModal(meal, true);
+    modalClose.focus();
 
-    modalTitleEl.textContent = meal.displayTitle || meal.strMeal || '—';
-    modalMetaEl.textContent = buildMeta(meal);
-    modalIngredientsEl.innerHTML = '';
-    modalInstructionsEl.textContent = '';
-    modalImageEl.src = meal.strMealThumb || '';
-    modalImageEl.alt = meal.displayTitle || meal.strMeal || 'Rezept';
-    modalImageEl.classList.toggle('hidden', !meal.strMealThumb);
-    setModalLoading(true);
-
-    ensureRecipeDetails(meal)
-      .then(function (updatedMeal) {
-        if (!modalOpen || requestId !== modalRequestId) return;
-        renderRecipeDetails(updatedMeal);
-        setModalLoading(false);
-      })
-      .catch(function () {
-        if (!modalOpen || requestId !== modalRequestId) return;
-        renderRecipeDetails(meal);
-        setModalLoading(false);
-      });
-
-    modalCloseBtn.focus();
+    loadDetails(meal).then(function (ready) {
+      if (!modalOpen || token !== loadToken) return;
+      fillModal(ready, false);
+    });
   }
 
   function closeRecipe() {
-    if (!modalEl) return;
-    modalRequestId += 1;
+    loadToken++;
     modalOpen = false;
     modalEl.classList.add('hidden');
     modalEl.setAttribute('aria-hidden', 'true');
     document.body.style.overflow = '';
-    setModalLoading(false);
   }
 
-  function oneMeal() {
-    return fetch(MEAL_API)
-      .then(function (r) {
-        if (!r.ok) throw new Error('net');
-        return r.json();
-      })
-      .then(function (d) {
-        return (d && d.meals && d.meals[0]) || null;
-      });
-  }
-
-  function onGenerate() {
+  function generate() {
     closeRecipe();
-    showLoading(true);
-    showError('');
+    show(loadingEl, true);
+    show(listEl, false);
+    errorEl.textContent = '';
+    show(errorEl, false);
 
-    Promise.all([ oneMeal(), oneMeal(), oneMeal(), oneMeal(), oneMeal(), oneMeal(), oneMeal() ])
-      .then(function (raw) {
-        var meals = raw.filter(Boolean);
-        if (!meals.length) {
-          showError('Fehler. Bitte erneut versuchen.');
-          showLoading(false);
-          return;
-        }
-        return Promise.all(meals.map(function (m) {
-          return translate(m.strMeal).then(function (de) {
-            m.displayTitle = de;
-            return m;
+    Promise.all(Array.from({ length: 7 }, fetchMeal))
+      .then(function (results) {
+        var picked = results.filter(Boolean);
+        if (!picked.length) throw new Error('empty');
+
+        return Promise.all(picked.map(function (meal) {
+          return translateOne(meal.strMeal).then(function (title) {
+            meal.displayTitle = title;
+            return meal;
           });
         }));
       })
       .then(function (translated) {
-        if (translated && translated.length) draw(translated);
-        showLoading(false);
+        renderList(translated);
       })
       .catch(function () {
-        showError('Fehler. Bitte erneut versuchen.');
-        showLoading(false);
+        errorEl.textContent = 'Fehler. Bitte erneut versuchen.';
+        show(errorEl, true);
+      })
+      .then(function () {
+        show(loadingEl, false);
+        show(listEl, true);
       });
   }
 
-  function onModalKeydown(e) {
+  btnGenerate.addEventListener('click', generate);
+  modalClose.addEventListener('click', closeRecipe);
+  modalBackdrop.addEventListener('click', closeRecipe);
+  document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && modalOpen) closeRecipe();
-  }
-
-  btnGen.addEventListener('click', onGenerate);
-  if (modalCloseBtn) modalCloseBtn.addEventListener('click', closeRecipe);
-  if (modalBackdrop) modalBackdrop.addEventListener('click', closeRecipe);
-  document.addEventListener('keydown', onModalKeydown);
+  });
 })();
