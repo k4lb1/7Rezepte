@@ -12,31 +12,31 @@
   <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
 </head>
 <body>
-  <div id="crt-overlay" class="crt-overlay" aria-hidden="true"></div>
-  <div id="scanline" class="scanline" aria-hidden="true"></div>
+  <div class="crt-overlay" aria-hidden="true"></div>
+  <div class="scanline" aria-hidden="true"></div>
 
   <header class="app-header">
     <h1 class="app-title">7Rezepte</h1>
   </header>
 
-  <main class="app" role="main">
+  <main class="app">
     <div class="content">
-      <div id="recipes-list" class="recipes-list" role="list"></div>
-      <div id="recipes-loading" class="recipes-loading hidden" aria-hidden="true">Lade…</div>
-      <div id="recipes-error" class="recipes-error hidden" role="alert"></div>
+      <div id="recipes-list" class="recipes-list"></div>
+      <p id="recipes-loading" class="recipes-loading hidden">Lade…</p>
+      <p id="recipes-error" class="recipes-error hidden" role="alert"></p>
     </div>
   </main>
 
   <footer class="footer">
-    <button type="button" id="btn-generate" class="btn btn-primary" aria-label="7 Rezepte generieren">Generieren</button>
+    <button type="button" id="btn-generate" class="btn">Generieren</button>
   </footer>
 
   <div id="recipe-modal" class="recipe-modal hidden" role="dialog" aria-modal="true" aria-labelledby="recipe-modal-title" aria-hidden="true">
-    <button type="button" class="recipe-modal-backdrop" aria-label="Dialog schließen"></button>
+    <button type="button" class="recipe-modal-backdrop" aria-label="Schließen"></button>
     <div class="recipe-modal-panel">
       <button type="button" id="recipe-modal-close" class="recipe-modal-close" aria-label="Schließen">×</button>
-      <div id="recipe-modal-loading" class="recipe-modal-loading hidden">Lade…</div>
-      <div id="recipe-modal-content" class="recipe-modal-content hidden">
+      <p id="recipe-modal-loading" class="recipe-modal-loading hidden">Lade…</p>
+      <div id="recipe-modal-content" class="hidden">
         <img id="recipe-modal-image" class="recipe-modal-image" alt="">
         <h2 id="recipe-modal-title" class="recipe-modal-title"></h2>
         <p id="recipe-modal-meta" class="recipe-modal-meta"></p>
