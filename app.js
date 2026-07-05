@@ -3,13 +3,11 @@
 
   var MEAL_API = 'https://www.themealdb.com/api/json/v1/1/random.php';
   var TRANS_API = 'https://api.mymemory.translated.net/get';
-  var THEME_KEY = '7rezepte-theme';
 
   var listEl = document.getElementById('recipes-list');
   var loadingEl = document.getElementById('recipes-loading');
   var errorEl = document.getElementById('recipes-error');
   var btnGen = document.getElementById('btn-generate');
-  var themeBtn = document.getElementById('theme-toggle');
   var modalEl = document.getElementById('recipe-modal');
   var modalBackdrop = modalEl && modalEl.querySelector('.recipe-modal-backdrop');
   var modalCloseBtn = document.getElementById('recipe-modal-close');
@@ -77,23 +75,6 @@
         });
       });
     }, Promise.resolve([])).then(joinTranslatedParts);
-  }
-
-  function loadTheme() {
-    try {
-      var saved = localStorage.getItem(THEME_KEY);
-      document.body.setAttribute('data-theme', saved === 'terminal' ? 'terminal' : 'neomorph');
-    } catch (e) {}
-  }
-
-  function saveTheme(theme) {
-    document.body.setAttribute('data-theme', theme);
-    try { localStorage.setItem(THEME_KEY, theme); } catch (e) {}
-  }
-
-  function cycleTheme() {
-    var cur = document.body.getAttribute('data-theme') || 'neomorph';
-    saveTheme(cur === 'neomorph' ? 'terminal' : 'neomorph');
   }
 
   function showLoading(on) {
@@ -337,9 +318,7 @@
     if (e.key === 'Escape' && modalOpen) closeRecipe();
   }
 
-  loadTheme();
   btnGen.addEventListener('click', onGenerate);
-  themeBtn.addEventListener('click', cycleTheme);
   if (modalCloseBtn) modalCloseBtn.addEventListener('click', closeRecipe);
   if (modalBackdrop) modalBackdrop.addEventListener('click', closeRecipe);
   document.addEventListener('keydown', onModalKeydown);
